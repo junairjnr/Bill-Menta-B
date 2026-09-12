@@ -9,7 +9,7 @@ validateEnv();
 import app from "./app.js";
 import { syncItemIndexes } from "./modules/masters/item/item.service.js";
 
-const PORT = process.env.PORT || 8008;
+const PORT = process.env.PORT || 8080;
 const MONGO_URI = process.env.MONGO_URI;
 
 // Connect to MongoDB first, then start server
