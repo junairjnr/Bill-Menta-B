@@ -83,6 +83,7 @@ export const stockReport = asyncHandler(async (req, res) => {
     const taxPercent = Number(row.itemId?.taxPercent) || DEFAULT_GST_PERCENT;
     const sgst = Number(((stockValue * taxPercent) / 200).toFixed(2));
     const cgst = Number(((stockValue * taxPercent) / 200).toFixed(2));
+    const totalValue = Number((stockValue + sgst + cgst).toFixed(2));
 
     return {
       ...row,
@@ -91,6 +92,7 @@ export const stockReport = asyncHandler(async (req, res) => {
       stockValue,
       sgst,
       cgst,
+      totalValue,
     };
   });
 
@@ -99,9 +101,12 @@ export const stockReport = asyncHandler(async (req, res) => {
   const summary = {
     totalItems: data.length,
     totalQty: Number(data.reduce((sum, row) => sum + (row.qty ?? 0), 0).toFixed(2)),
+    totalTaxable: Number(data.reduce((sum, row) => sum + row.stockValue, 0).toFixed(2)),
     totalSGST: Number(data.reduce((sum, row) => sum + (row.sgst ?? 0), 0).toFixed(2)),
     totalCGST: Number(data.reduce((sum, row) => sum + (row.cgst ?? 0), 0).toFixed(2)),
-    totalStockValue: Number(data.reduce((sum, row) => sum + row.stockValue, 0).toFixed(2)),
+    totalStockValue: Number(
+      data.reduce((sum, row) => sum + (row.totalValue ?? row.stockValue), 0).toFixed(2)
+    ),
   };
 
   const total = data.length;

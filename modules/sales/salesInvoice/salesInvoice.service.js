@@ -17,6 +17,10 @@ import {
   stateCodeFromGstin,
 } from "../../../utils/gstTax.js";
 import { resolveItemBaseRate } from "../../../utils/itemRates.js";
+import {
+  normalizeInvoicePaymentSplits,
+  resolveInvoicePaymentFromInput,
+} from "../../../utils/invoicePayment.utils.js";
 
 const customerSnapshotFromCustomer = (customer) => ({
   name: customer.name,
@@ -80,32 +84,13 @@ const computeInvoiceTotals = ({
   };
 };
 
-const resolveInvoicePayment = (grandTotal, receivedInput, saleMode = "cash") => {
-  const grand = round2(grandTotal);
-  if (grand <= 0) {
-    return { paidAmount: 0, balanceAmount: 0, paymentStatus: "pending" };
-  }
-
-  let received = round2(Math.max(0, Number(receivedInput) || 0));
-
-  if (saleMode === "credit") {
-    // Credit sale: only explicit advance counts; full balance stays on customer.
-    received = round2(Math.max(0, Number(receivedInput) || 0));
-  } else if (received <= 0 && grand > 0) {
-    // Cash sale: empty received means full collection at billing.
-    received = grand;
-  }
-
-  const paidAmount = received > grand ? grand : received;
-  const balanceAmount = round2(grand - paidAmount);
-
-  let paymentStatus = "pending";
-  if (saleMode === "credit" && paidAmount <= 0) paymentStatus = "unpaid";
-  if (paidAmount >= grand - 0.009) paymentStatus = "paid";
-  else if (paidAmount > 0) paymentStatus = "partial";
-
-  return { paidAmount, balanceAmount, paymentStatus };
-};
+const resolveInvoicePayment = (grandTotal, receivedInput, saleMode = "cash") =>
+  resolveInvoicePaymentFromInput({
+    grandTotal,
+    receivedInput,
+    saleMode,
+    autoFullPayment: true,
+  });
 
 // ── Create Sales Invoice ──────────────────────────────────────
 export const createSalesInvoice = async ({
@@ -123,6 +108,7 @@ export const createSalesInvoice = async ({
   cashDiscountAmt = 0,
   saleMode = "cash",
   paidAmount: receivedInput = 0,
+  payments = [],
   userId,
 }) => {
   const customer = await Customer.findOne({
@@ -233,12 +219,7 @@ export const createSalesInvoice = async ({
   }
 
   const isCashSale = saleMode !== "credit";
-  const payment = resolveInvoicePayment(
-    totals.grandTotal,
-    receivedInput,
-    isCashSale ? "cash" : "credit"
-  );
-  const { paidAmount, balanceAmount, paymentStatus } = payment;
+  const effectiveSaleMode = isCashSale ? "cash" : "credit";
 
   const customerSnapshot = {
     name: customer.name,
@@ -257,6 +238,24 @@ export const createSalesInvoice = async ({
   };
 
   return withTransaction(async (session) => {
+    const payment = resolveInvoicePayment(
+      totals.grandTotal,
+      receivedInput,
+      effectiveSaleMode
+    );
+    const { paidAmount, balanceAmount, paymentStatus } = payment;
+
+    let invoicePayments = [];
+    if (Array.isArray(payments) && payments.length && paidAmount > 0) {
+      const splits = await normalizeInvoicePaymentSplits({
+        companyId,
+        payments,
+        paidAmount,
+        session,
+      });
+      invoicePayments = splits.normalizedPayments;
+    }
+
     const [invoice] = await SalesInvoice.create(
       [{
         companyId,
@@ -290,6 +289,7 @@ export const createSalesInvoice = async ({
         paidAmount,
         balanceAmount,
         paymentStatus,
+        payments: invoicePayments,
         status: "confirmed",
         notes,
       }],

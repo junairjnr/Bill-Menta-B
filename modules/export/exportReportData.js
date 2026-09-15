@@ -83,7 +83,10 @@ export const fetchOperationalReportRows = async (reportType, ctx) => {
         const rate = row.avgCost ?? 0;
         const stockValue = Number((row.qty * rate).toFixed(2));
         const taxPercent = Number(row.itemId?.taxPercent) || DEFAULT_GST_PERCENT;
-        return { ...row, rate, stockValue, sgst: Number(((stockValue * taxPercent) / 200).toFixed(2)), cgst: Number(((stockValue * taxPercent) / 200).toFixed(2)) };
+        const sgst = Number(((stockValue * taxPercent) / 200).toFixed(2));
+        const cgst = Number(((stockValue * taxPercent) / 200).toFixed(2));
+        const totalValue = Number((stockValue + sgst + cgst).toFixed(2));
+        return { ...row, rate, stockValue, sgst, cgst, totalValue };
       });
     }
     case "ledger-report": {
@@ -168,6 +171,33 @@ export const fetchOperationalReportRows = async (reportType, ctx) => {
         }
       }
       return rows;
+    }
+    case "sales-return-report": {
+      const filter = { ...baseScope(ctx), ...buildDateFilter(query, "returnDate") };
+      if (query.customerId) filter.customerId = query.customerId;
+      if (query.salesType) filter.salesType = query.salesType;
+      if (query.warehouseId) filter.warehouseId = query.warehouseId;
+      if (query.status) filter.status = query.status;
+      return SalesReturn.find(filter)
+        .populate("customerId", "name phone")
+        .populate("warehouseId", "name code")
+        .select("returnNo returnDate returnMode salesType customerSnapshot priceLevelSnapshot originalInvoiceNo netAmount totalSGST totalCGST totalTax grandTotal status")
+        .sort({ returnDate: -1 })
+        .limit(EXPORT_LIMIT)
+        .lean();
+    }
+    case "purchase-return-report": {
+      const filter = { ...baseScope(ctx), ...buildDateFilter(query, "returnDate") };
+      if (query.vendorId) filter.vendorId = query.vendorId;
+      if (query.warehouseId) filter.warehouseId = query.warehouseId;
+      if (query.status) filter.status = query.status;
+      return PurchaseReturn.find(filter)
+        .populate("vendorId", "name phone")
+        .populate("warehouseId", "name code")
+        .select("returnNo returnDate vendorSnapshot originalInvoiceNo vendorInvoiceNo netAmount totalSGST totalCGST totalTax grandTotal status")
+        .sort({ returnDate: -1 })
+        .limit(EXPORT_LIMIT)
+        .lean();
     }
     case "expense-report": {
       const filter = { companyId, branchId, financialYearId, isActive: { $ne: false } };

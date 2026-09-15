@@ -26,6 +26,10 @@ const itemSchema = new mongoose.Schema(
     price: { type: Number, required: true, min: 0 }, // legacy; kept in sync with salesRate
     taxPercent: { type: Number, default: 0 }, // GST %
     hsnCode: { type: String, trim: true }, // for GST reporting
+    taxMasterId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "TaxMaster",
+    },
     description: String,
     isActive: { type: Boolean, default: true },
   },

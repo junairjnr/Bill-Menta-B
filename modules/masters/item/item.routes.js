@@ -11,11 +11,12 @@ const router = express.Router();
 
 const ctrl = crudFactory(itemModel, {
   selectFields:
-    "name code uomId categoryId hsnCode salesRate purchaseRate price taxPercent description isActive createdAt",
+    "name code uomId categoryId hsnCode salesRate purchaseRate price taxPercent taxMasterId description isActive createdAt",
   hasTextIndex: true,
   populateOpts: [
     { path: "categoryId", select: "name" },
     { path: "uomId", select: "name shortCode" },
+    { path: "taxMasterId", select: "name taxPercent" },
   ],
 });
 
@@ -59,9 +60,10 @@ const update = asyncHandler(async (req, res) => {
         { $set: normalizeItemRates(req.body) },
         { new: true, runValidators: true }
       )
-      .select("name code uomId categoryId hsnCode salesRate purchaseRate price taxPercent description isActive createdAt")
+      .select("name code uomId categoryId hsnCode salesRate purchaseRate price taxPercent taxMasterId description isActive createdAt")
       .populate("categoryId", "name")
       .populate("uomId", "name shortCode")
+      .populate("taxMasterId", "name taxPercent")
       .lean();
 
     if (!doc) throw new ApiError(404, "Record not found");
@@ -95,8 +97,9 @@ router.get(
     }
 
     const data = await itemModel.find(filter)
-      .select("name code hsnCode salesRate purchaseRate price taxPercent uomId")
+      .select("name code hsnCode salesRate purchaseRate price taxPercent taxMasterId uomId")
       .populate("uomId", "name shortCode")
+      .populate("taxMasterId", "name taxPercent")
       .limit(10)
       .lean();
 

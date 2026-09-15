@@ -152,6 +152,9 @@ export const updateCompanySettings = async (companyId, payload) => {
   if (plan !== undefined) company.plan = plan;
   if (gstin !== undefined) company.gstin = gstin;
   if (terms !== undefined) company.terms = terms;
+  if (payload.defaultSalesType !== undefined) {
+    company.defaultSalesType = payload.defaultSalesType;
+  }
 
   await company.save();
   return company;

@@ -18,6 +18,8 @@ router.get("/purchase-history", ctrl.purchaseHistory);
 router.get("/sales-history",    ctrl.salesHistory);
 router.get("/sales-return-history", ctrl.salesReturnHistory);
 router.get("/purchase-return-history", ctrl.purchaseReturnHistory);
+router.get("/sales-return", ctrl.salesReturnReport);
+router.get("/purchase-return", ctrl.purchaseReturnReport);
 router.get("/expense", ctrl.expenseReport);
 
 export default router;

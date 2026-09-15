@@ -231,6 +231,10 @@ import { getNextPurchaseInvoiceNo } from "../../documentNumber/documentNumber.se
 import { regexContains } from "../../../utils/escapeRegex.js";
 import { optionalSearchString } from "../../../utils/sanitizeInput.js";
 import { normalizeAttachments } from "../../upload/upload.utils.js";
+import {
+  normalizeInvoicePaymentSplits,
+  resolveInvoicePaymentFromInput,
+} from "../../../utils/invoicePayment.utils.js";
 
 // ── Create Purchase Invoice ───────────────────────────────────
 export const createPurchaseInvoice = async ({
@@ -244,6 +248,8 @@ export const createPurchaseInvoice = async ({
   items,
   notes,
   attachments,
+  payments = [],
+  paidAmount: receivedInput = 0,
   userId,
 }) => {
   return withTransaction(async (session) => {
@@ -333,6 +339,26 @@ export const createPurchaseInvoice = async ({
 
     // 6. Create invoice
     const normalizedAttachments = normalizeAttachments(companyId, attachments);
+
+    const payment = resolveInvoicePaymentFromInput({
+      grandTotal,
+      receivedInput,
+      saleMode: "credit",
+      autoFullPayment: false,
+    });
+    const { paidAmount, balanceAmount, paymentStatus } = payment;
+
+    let invoicePayments = [];
+    if (Array.isArray(payments) && payments.length && paidAmount > 0) {
+      const splits = await normalizeInvoicePaymentSplits({
+        companyId,
+        payments,
+        paidAmount,
+        session,
+      });
+      invoicePayments = splits.normalizedPayments;
+    }
+
     const [invoice] = await PurchaseInvoice.create([{
       companyId, branchId, financialYearId, warehouseId,
       invoiceNo, vendorInvoiceNo,
@@ -343,9 +369,10 @@ export const createPurchaseInvoice = async ({
       totalSGST: Number(totalSGST.toFixed(2)),
       totalCGST: Number(totalCGST.toFixed(2)),
       totalTax, total, roundOff, grandTotal,
-      paidAmount: 0,
-      balanceAmount: grandTotal,
-      paymentStatus: "pending",
+      paidAmount,
+      balanceAmount,
+      paymentStatus,
+      payments: invoicePayments,
       status: "confirmed", notes,
       attachments: normalizedAttachments,
     }], sessionOpts(session));

@@ -17,8 +17,35 @@ const line = (account, { debit = 0, credit = 0, customerId, vendorId, narration 
 });
 
 const cashOrBankAccount = async (companyId, paymentMode, session) => {
-  const isBank = paymentMode === "bank" || paymentMode === "bank_transfer";
+  const isBank =
+    paymentMode === "bank" ||
+    paymentMode === "bank_transfer" ||
+    paymentMode === "upi" ||
+    paymentMode === "cheque" ||
+    paymentMode === "card";
   return getAccountByCode(companyId, isBank ? COA.BANK : COA.CASH, session);
+};
+
+const appendPaymentLines = async ({
+  lines,
+  companyId,
+  paymentLines,
+  side,
+  narrationPrefix,
+  session,
+}) => {
+  for (const payment of paymentLines) {
+    const amount = round2(payment.amount);
+    if (amount <= 0) continue;
+
+    const account = await cashOrBankAccount(companyId, payment.paymentMode, session);
+    lines.push(
+      line(account, {
+        [side]: amount,
+        narration: `${narrationPrefix} (${payment.paymentMode})`,
+      })
+    );
+  }
 };
 
 const appendRoundOffLine = async (lines, companyId, roundOff, narration, session) => {
@@ -78,9 +105,20 @@ export const postSalesInvoice = async (
   const billTotal = round2(invoice.billTotal ?? grandTotal + cashDiscountAmt);
   const roundOff = round2(invoice.roundOff ?? billTotal - netAmount - totalTax);
   const isCreditSale = invoice.saleMode === "credit";
+  const paymentLines = (invoice.payments || []).filter((p) => round2(p.amount) > 0);
+  const hasSplitPayments = paymentLines.length > 0;
 
   if (isCreditSale) {
-    if (paidAmount > 0) {
+    if (hasSplitPayments) {
+      await appendPaymentLines({
+        lines,
+        companyId,
+        paymentLines,
+        side: "debit",
+        narrationPrefix: `Advance received ${invoice.invoiceNo}`,
+        session,
+      });
+    } else if (paidAmount > 0) {
       lines.push(
         line(cash, {
           debit: paidAmount,
@@ -88,6 +126,24 @@ export const postSalesInvoice = async (
         })
       );
     }
+    if (balanceAmount > 0) {
+      lines.push(
+        line(ar, {
+          debit: balanceAmount,
+          customerId: invoice.customerId,
+          narration: `Sales ${invoice.invoiceNo}`,
+        })
+      );
+    }
+  } else if (hasSplitPayments) {
+    await appendPaymentLines({
+      lines,
+      companyId,
+      paymentLines,
+      side: "debit",
+      narrationPrefix: `Sales ${invoice.invoiceNo}`,
+      session,
+    });
     if (balanceAmount > 0) {
       lines.push(
         line(ar, {
@@ -194,16 +250,23 @@ export const postPurchaseInvoice = async (
   const existing = await getJournalByReference(companyId, "PurchaseInvoice", invoice._id);
   if (existing) return existing;
 
-  const [inventory, gstInput, ap] = await Promise.all([
+  const [inventory, gstInput, ap, cash] = await Promise.all([
     getAccountByCode(companyId, COA.INVENTORY, session),
     getAccountByCode(companyId, COA.GST_INPUT, session),
     getAccountByCode(companyId, COA.ACCOUNTS_PAYABLE, session),
+    getAccountByCode(companyId, COA.CASH, session),
   ]);
 
   const netAmount = round2(invoice.netAmount);
   const totalTax = round2(invoice.totalTax);
   const grandTotal = round2(invoice.grandTotal);
+  const paidAmount = round2(invoice.paidAmount ?? 0);
+  const balanceAmount = round2(
+    invoice.balanceAmount ?? Math.max(0, grandTotal - paidAmount)
+  );
   const roundOff = round2(invoice.roundOff ?? grandTotal - netAmount - totalTax);
+  const paymentLines = (invoice.payments || []).filter((p) => round2(p.amount) > 0);
+  const hasSplitPayments = paymentLines.length > 0;
 
   const lines = [
     line(inventory, {
@@ -214,12 +277,51 @@ export const postPurchaseInvoice = async (
       debit: totalTax,
       narration: `Input GST ${invoice.invoiceNo}`,
     }),
-    line(ap, {
-      credit: grandTotal,
-      vendorId: invoice.vendorId,
-      narration: `Purchase ${invoice.invoiceNo}`,
-    }),
   ];
+
+  if (hasSplitPayments) {
+    await appendPaymentLines({
+      lines,
+      companyId,
+      paymentLines,
+      side: "credit",
+      narrationPrefix: `Payment ${invoice.invoiceNo}`,
+      session,
+    });
+    if (balanceAmount > 0) {
+      lines.push(
+        line(ap, {
+          credit: balanceAmount,
+          vendorId: invoice.vendorId,
+          narration: `Purchase ${invoice.invoiceNo}`,
+        })
+      );
+    }
+  } else if (paidAmount > 0) {
+    lines.push(
+      line(cash, {
+        credit: paidAmount,
+        narration: `Payment ${invoice.invoiceNo}`,
+      })
+    );
+    if (balanceAmount > 0) {
+      lines.push(
+        line(ap, {
+          credit: balanceAmount,
+          vendorId: invoice.vendorId,
+          narration: `Purchase ${invoice.invoiceNo}`,
+        })
+      );
+    }
+  } else {
+    lines.push(
+      line(ap, {
+        credit: grandTotal,
+        vendorId: invoice.vendorId,
+        narration: `Purchase ${invoice.invoiceNo}`,
+      })
+    );
+  }
 
   await appendRoundOffLine(
     lines,

@@ -23,7 +23,7 @@ export const DOCUMENT_TYPES = {
 
 const voucherPrefix = (voucherType) => (voucherType === "receipt" ? "RCPT" : "PAY");
 
-/** Sales: PKS/WH/2026-27/01 or PKS/RT/2026-27/01 */
+/** Sales: BM/WH/2026-27/01 or BM/RT/2026-27/01 */
 export const getNextSalesInvoiceNo = async (companyId, financialYearId, salesType) => {
   const [fy, company] = await Promise.all([
     FinancialYear.findById(financialYearId),
@@ -60,7 +60,7 @@ export const getNextSalesInvoiceNo = async (companyId, financialYearId, salesTyp
   return `${prefix}${String(lastNo + 1).padStart(2, "0")}`;
 };
 
-/** Purchase: PKS/PI/2026-27/01 */
+/** Purchase: BM/PI/2026-27/01 */
 export const getNextPurchaseInvoiceNo = async (companyId, financialYearId) => {
   const [fy, company] = await Promise.all([
     FinancialYear.findById(financialYearId),
@@ -95,7 +95,7 @@ export const getNextPurchaseInvoiceNo = async (companyId, financialYearId) => {
   return `${prefix}${String(lastNo + 1).padStart(2, "0")}`;
 };
 
-/** Sales return: PKS/SR-WH/2026-27/01 */
+/** Sales return: BM/SR-WH/2026-27/01 */
 export const getNextSalesReturnNo = async (companyId, financialYearId, salesType) => {
   const [fy, company] = await Promise.all([
     FinancialYear.findById(financialYearId),
@@ -129,7 +129,7 @@ export const getNextSalesReturnNo = async (companyId, financialYearId, salesType
   return `${prefix}${String(lastNo + 1).padStart(2, "0")}`;
 };
 
-/** Purchase return: PKS/PR/2026-27/01 */
+/** Purchase return: BM/PR/2026-27/01 */
 export const getNextPurchaseReturnNo = async (companyId, financialYearId) => {
   const [fy, company] = await Promise.all([
     FinancialYear.findById(financialYearId),

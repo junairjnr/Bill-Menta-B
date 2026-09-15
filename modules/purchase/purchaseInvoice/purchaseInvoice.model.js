@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import attachmentSchema from "../../upload/attachment.schema.js";
+import invoicePaymentSchema from "../../common/invoicePayment.schema.js";
 
 // ── Item row inside invoice ───────────────────────────────────
 const purchaseItemSchema = new mongoose.Schema(
@@ -50,7 +51,7 @@ const purchaseInvoiceSchema = new mongoose.Schema(
     },
 
     // ── Invoice identity ────────────────────────────────────
-    invoiceNo: { type: String, required: true }, // PKS/PI/2026-27/01 (our number)
+    invoiceNo: { type: String, required: true }, // BM/PI/2026-27/01 (our number)
     vendorInvoiceNo: { type: String, required: true, trim: true }, // supplier's invoice number
     purchaseDate: { type: Date, required: true },
 
@@ -91,6 +92,7 @@ const purchaseInvoiceSchema = new mongoose.Schema(
       enum: ["pending", "partial", "paid", "unpaid"],
       default: "pending",
     },
+    payments: { type: [invoicePaymentSchema], default: [] },
 
     status: {
       type: String,

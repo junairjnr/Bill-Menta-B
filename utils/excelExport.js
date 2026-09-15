@@ -13,9 +13,21 @@ const NUMERIC_KEY_PATTERN =
   /amount|total|balance|debit|credit|price|qty|rate|tax|percent|slno|round/i;
 
 const isNumericColumn = (col, value) => {
-  if (col.key === "slno" || col.virtual) return true;
+  if (col.key === "slno" || col.virtual) return false;
   if (typeof value === "number") return true;
   return NUMERIC_KEY_PATTERN.test(col.key);
+};
+
+const columnAlignment = (col, numeric) => {
+  if (col.key === "slno" || col.virtual) return "left";
+  if (col.align === "right") return "right";
+  if (col.align === "center") return "center";
+  return numeric ? "right" : "left";
+};
+
+const columnNumberFormat = (col) => {
+  if (col.key === "slno" || col.virtual) return "0";
+  return "#,##0.00";
 };
 
 const styleSheet = (sheet, columns) => {
@@ -44,12 +56,14 @@ const styleSheet = (sheet, columns) => {
 
       cell.alignment = {
         vertical: "middle",
-        horizontal: numeric ? "right" : "left",
+        horizontal: columnAlignment(col, numeric),
         wrapText: true,
       };
 
       if (numeric && typeof cell.value === "number") {
-        cell.numFmt = "#,##0.00";
+        cell.numFmt = columnNumberFormat(col);
+      } else if ((col.key === "slno" || col.virtual) && typeof cell.value === "number") {
+        cell.numFmt = columnNumberFormat(col);
       }
     }
 

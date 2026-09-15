@@ -246,6 +246,7 @@
 // export default mongoose.model("SalesInvoice", salesInvoiceSchema);
 
 import mongoose from "mongoose";
+import invoicePaymentSchema from "../../common/invoicePayment.schema.js";
 
 const salesItemSchema = new mongoose.Schema(
   {
@@ -296,7 +297,7 @@ const salesInvoiceSchema = new mongoose.Schema(
       required: true,
     },
 
-    // PKS/WH/2026-27/01 → wholesale, PKS/RT/2026-27/01 → retail
+    // BM/WH/2026-27/01 → wholesale, BM/RT/2026-27/01 → retail
     invoiceNo: { type: String, required: true },
     invoiceDate: { type: Date, required: true },
     salesType: { type: String, enum: ["retail", "wholesale"], required: true },
@@ -353,6 +354,7 @@ const salesInvoiceSchema = new mongoose.Schema(
       enum: ["pending", "partial", "paid", "unpaid"],
       default: "pending",
     },
+    payments: { type: [invoicePaymentSchema], default: [] },
 
     status: {
       type: String,

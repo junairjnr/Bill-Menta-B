@@ -6,6 +6,8 @@ import { salesHistory } from "./salesHistory/salesHistory.controller.js";
 import { purchaseHistory } from "./purchaseHistory/purchaseHistory.controller.js";
 import { salesReturnHistory } from "./salesReturnHistory/salesReturnHistory.controller.js";
 import { purchaseReturnHistory } from "./purchaseReturnHistory/purchaseReturnHistory.controller.js";
+import { salesReturnReport } from "./salesReturnReport/salesReturnReport.controller.js";
+import { purchaseReturnReport } from "./purchaseReturnReport/purchaseReturnReport.controller.js";
 import { shopReport } from "./shopReport/shopReport.controller.js";
 import { expenseReport } from "./expenseReport/expenseReport.controller.js";
 import { dashboardReport } from "./dashboardReport/dashboardReport.controller.js";
@@ -19,6 +21,8 @@ export default {
   purchaseHistory,
   salesReturnHistory,
   purchaseReturnHistory,
+  salesReturnReport,
+  purchaseReturnReport,
   shopReport,
   dashboardReport,
   expenseReport,

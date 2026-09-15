@@ -339,26 +339,21 @@ export const getAllPartyBalances = async (scope, partyType) => {
     }
   }
 
-  const partyIds = Object.keys(balanceMap);
-  if (!partyIds.length) return [];
-
   const typeFilter = partyType === "customer" ? "sales" : "purchase";
   const parties = await Customer.find({
     companyId: scope.companyId,
-    _id: { $in: partyIds },
     type: typeFilter,
+    isActive: { $ne: false },
   })
     .select("name phone gstin")
     .lean();
 
-  const partyMap = Object.fromEntries(parties.map((p) => [String(p._id), p]));
-
-  return partyIds
-    .map((id) => ({
-      partyId: id,
-      name: partyMap[id]?.name || "Unknown",
-      phone: partyMap[id]?.phone || "",
-      balance: balanceMap[id],
+  return parties
+    .map((party) => ({
+      partyId: String(party._id),
+      name: party.name || "Unknown",
+      phone: party.phone || "",
+      balance: balanceMap[String(party._id)] ?? 0,
     }))
     .filter((row) => row.balance !== 0)
     .sort((a, b) => b.balance - a.balance);
