@@ -2,6 +2,7 @@ import ReceiptPayment from "./receiptPayment.model.js";
 import Allocation from "./allocation.model.js";
 import SalesInvoice from "../sales/salesInvoice/salesInvoice.model.js";
 import PurchaseInvoice from "../purchase/purchaseInvoice/purchaseInvoice.model.js";
+import PurchaseReturn from "../purchase/purchaseReturn/purchaseReturn.model.js";
 import Customer from "../masters/customer/customer.model.js";
 import BankAccount from "../masters/bank/bank.model.js";
 import ApiError from "../../utils/ApiError.js";
@@ -150,7 +151,7 @@ export const getOutstandingInvoices = async ({
     .select(
       `invoiceNo ${dateField} grandTotal returnedAmount paidAmount balanceAmount paymentStatus status createdAt`
     )
-    .sort({ [dateField]: 1, createdAt: 1, _id: 1 })
+    .sort({ [dateField]: -1, createdAt: -1, _id: -1 })
     .lean();
 
   const mapped = invoices.map((inv) => {
@@ -184,6 +185,30 @@ export const getOutstandingInvoices = async ({
   );
 
   const outstanding = mapped.filter((inv) => inv.balanceAmount > 0.009);
+
+  if (invoiceType === "purchase") {
+    const returnFilter = {
+      companyId,
+      financialYearId,
+      status: "confirmed",
+      isActive: { $ne: false },
+      returnMode: "manual",
+      $or: [{ vendorId: partyOid }, { vendorId: partyId }],
+    };
+    const manualReturnRows = await PurchaseReturn.find(returnFilter)
+      .select("grandTotal")
+      .lean();
+    const manualReturnCredit = manualReturnRows.reduce(
+      (sum, row) => sum + Number(row.grandTotal || 0),
+      0
+    );
+    if (manualReturnCredit > 0) {
+      summary.totalOutstanding = Math.max(
+        0,
+        Number((summary.totalOutstanding - manualReturnCredit).toFixed(2))
+      );
+    }
+  }
 
   return { invoices: outstanding, summary };
 };
@@ -411,7 +436,7 @@ export const createVoucher = async ({
       );
     }
 
-    return await getOneVoucher(companyId, voucher._id);
+    return await getOneVoucher(companyId, voucher._id, session);
   });
 };
 
@@ -515,17 +540,20 @@ export const getAllVouchers = async ({
   };
 };
 
-export const getOneVoucher = async (companyId, id) => {
-  const voucher = await ReceiptPayment.findOne({ _id: id, companyId, isActive: true })
+export const getOneVoucher = async (companyId, id, session = null) => {
+  let voucherQuery = ReceiptPayment.findOne({ _id: id, companyId, isActive: true })
     .populate("partyId", "name phone gstin address")
-    .populate("bankAccountId", "accountName bankName accountNumber ifscCode upiId branch")
-    .lean();
+    .populate("bankAccountId", "accountName bankName accountNumber ifscCode upiId branch");
+  if (session) voucherQuery = voucherQuery.session(session);
+
+  const voucher = await voucherQuery.lean();
 
   if (!voucher) throw new ApiError(404, "Voucher not found");
 
-  const allocations = await Allocation.find({ receiptPaymentId: id })
-    .sort({ invoiceDate: 1 })
-    .lean();
+  let allocationQuery = Allocation.find({ receiptPaymentId: id }).sort({ invoiceDate: 1 });
+  if (session) allocationQuery = allocationQuery.session(session);
+
+  const allocations = await allocationQuery.lean();
 
   const party =
     voucher.partyId && typeof voucher.partyId === "object" ? voucher.partyId : null;

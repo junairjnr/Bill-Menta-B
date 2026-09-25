@@ -84,6 +84,7 @@ import purchaseRoutes from "./modules/purchase/purchaseInvoice/purchaseInvoice.r
 import purchaseReturnRoutes from "./modules/purchase/purchaseReturn/purchaseReturn.routes.js";
 import salesInvoiceRoutes from "./modules/sales/salesInvoice/salesInvoice.routes.js";
 import salesReturnRoutes from "./modules/sales/salesReturn/salesReturn.routes.js";
+import quotationRoutes from "./modules/sales/quotation/quotation.routes.js";
 import reportRoutes from "./modules/reports/report.routes.js";
 import bankAccountRoutes from "./modules/masters/bank/bank.routes.js";
 import receiptRoutes from "./modules/receipt-payment/receipt.routes.js";
@@ -153,6 +154,7 @@ app.use("/api/warehouses", warehouseRoutes);
 app.use("/api/purchase/returns", purchaseReturnRoutes);
 app.use("/api/purchase", purchaseRoutes);
 app.use("/api/sales/returns", salesReturnRoutes);
+app.use("/api/sales/quotations", quotationRoutes);
 app.use("/api/sales", salesInvoiceRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/bank-accounts", bankAccountRoutes);

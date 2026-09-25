@@ -30,6 +30,9 @@ export const normalizeInvoicePaymentSplits = async ({
   if (paid <= 0) return { normalizedPayments: [] };
 
   const rows = Array.isArray(payments) ? payments : [];
+  const fallbackBankAccountId = rows.find(
+    (row) => row.bankAccountId && String(row.bankAccountId).trim()
+  )?.bankAccountId;
   const normalizedPayments = [];
   let splitTotal = 0;
 
@@ -44,11 +47,12 @@ export const normalizeInvoicePaymentSplits = async ({
 
     let bankAccountSnapshot;
     if (needsBankAccount(paymentMode)) {
-      if (!row.bankAccountId) {
+      const bankAccountId = row.bankAccountId || fallbackBankAccountId;
+      if (!bankAccountId) {
         throw new ApiError(400, "Bank account is required for this payment mode");
       }
       const bank = await BankAccount.findOne({
-        _id: row.bankAccountId,
+        _id: bankAccountId,
         companyId,
         isActive: true,
       }).session(session);
@@ -61,6 +65,16 @@ export const normalizeInvoicePaymentSplits = async ({
         ifscCode: bank.ifscCode || "",
         upiId: bank.upiId || "",
       };
+
+      splitTotal = round2(splitTotal + amount);
+      normalizedPayments.push({
+        paymentMode,
+        bankAccountId,
+        bankAccountSnapshot,
+        amount,
+        referenceNo: String(row.referenceNo || "").trim(),
+      });
+      continue;
     }
 
     splitTotal = round2(splitTotal + amount);

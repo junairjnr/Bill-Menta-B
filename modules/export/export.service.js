@@ -2,6 +2,7 @@ import customerModel from "../masters/customer/customer.model.js";
 import itemModel from "../masters/item/item.model.js";
 import Warehouse from "../warehouse/warehouse.model.js";
 import * as salesService from "../sales/salesInvoice/salesInvoice.service.js";
+import * as quotationService from "../sales/quotation/quotation.service.js";
 import * as purchaseService from "../purchase/purchaseInvoice/purchaseInvoice.services.js";
 import * as receiptService from "../receipt-payment/receiptPayment.service.js";
 import * as expenseService from "../expense/expense.service.js";
@@ -44,6 +45,17 @@ const fetchRows = async (reportType, ctx) => {
       return Warehouse.find({ companyId }).sort({ name: 1 }).lean();
     case "sales": {
       const result = await salesService.getAllSalesInvoices({
+        companyId,
+        branchId: ctx.branchId,
+        financialYearId: ctx.financialYearId,
+        page: 1,
+        limit: 10000,
+        ...query,
+      });
+      return result.data || result;
+    }
+    case "quotations": {
+      const result = await quotationService.getAllQuotations({
         companyId,
         branchId: ctx.branchId,
         financialYearId: ctx.financialYearId,

@@ -305,7 +305,6 @@ const salesInvoiceSchema = new mongoose.Schema(
     priceLevelId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "PriceLevel",
-      required: true,
     },
     priceLevelSnapshot: { name: String, taxPercent: Number },
 

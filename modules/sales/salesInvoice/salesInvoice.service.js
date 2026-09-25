@@ -8,6 +8,7 @@ import ApiError      from "../../../utils/ApiError.js";
 import { withTransaction, sessionOpts } from "../../../utils/withTransaction.js";
 import { postSalesInvoice } from "../../accounting/journal/posting.service.js";
 import { getNextSalesInvoiceNo } from "../../documentNumber/documentNumber.service.js";
+import { markQuotationConverted } from "../quotation/quotation.service.js";
 import { regexContains } from "../../../utils/escapeRegex.js";
 import { optionalSearchString } from "../../../utils/sanitizeInput.js";
 import Branch from "../../branch/branch.model.js";
@@ -109,6 +110,7 @@ export const createSalesInvoice = async ({
   saleMode = "cash",
   paidAmount: receivedInput = 0,
   payments = [],
+  quotationId,
   userId,
 }) => {
   const customer = await Customer.findOne({
@@ -122,12 +124,15 @@ export const createSalesInvoice = async ({
     throw new ApiError(404, `Customer not found. Must be a ${salesType} customer.`);
   }
 
-  const priceLevel = await PriceLevel.findOne({
-    _id: priceLevelId,
-    companyId,
-    isActive: true,
-  });
-  if (!priceLevel) throw new ApiError(404, "Price level not found");
+  let priceLevel = null;
+  if (priceLevelId) {
+    priceLevel = await PriceLevel.findOne({
+      _id: priceLevelId,
+      companyId,
+      isActive: true,
+    });
+    if (!priceLevel) throw new ApiError(404, "Price level not found");
+  }
 
   const branch = await Branch.findOne({ _id: branchId, companyId }).select("address gstin");
   const supplierStateCode =
@@ -149,6 +154,26 @@ export const createSalesInvoice = async ({
     throw new ApiError(400, "One or more items not found");
   }
 
+  for (const row of items) {
+    const qty = Number(row.qty) || 0;
+    if (qty <= 0) continue;
+
+    const stock = await Stock.findOne({
+      companyId,
+      warehouseId,
+      itemId: row.itemId,
+      financialYearId,
+    }).lean();
+
+    if ((stock?.qty ?? 0) < qty) {
+      const dbItem = dbItems.find((d) => String(d._id) === String(row.itemId));
+      throw new ApiError(
+        400,
+        `Insufficient stock for ${dbItem?.name || "item"}. Available: ${stock?.qty ?? 0}, Requested: ${qty}`
+      );
+    }
+  }
+
   const invoiceNo = await getNextSalesInvoiceNo(companyId, financialYearId, salesType);
 
   let lineNetAmount = 0;
@@ -158,11 +183,18 @@ export const createSalesInvoice = async ({
 
   const processedItems = items.map((row, index) => {
     const dbItem = dbItems.find((d) => String(d._id) === String(row.itemId));
+    if (!dbItem?.uomId?._id) {
+      throw new ApiError(400, `Unit of measure missing for item ${dbItem?.name || row.itemId}`);
+    }
 
-    const priceLevelPct = priceLevel.taxPercent;
+    const priceLevelPct = priceLevel?.taxPercent ?? 0;
     const baseRate = resolveItemBaseRate(dbItem, row, priceLevelPct);
-    const rate = Number((baseRate + (baseRate * priceLevelPct / 100)).toFixed(2));
-    const taxPercent = Number(dbItem.taxPercent) || 0;
+    const calculatedRate = Number(
+      (baseRate + (baseRate * priceLevelPct) / 100).toFixed(2)
+    );
+    const submittedRate = Number(row.rate);
+    const rate = submittedRate > 0 ? submittedRate : calculatedRate;
+    const taxPercent = Number(row.taxPercent ?? dbItem.taxPercent ?? 0);
 
     const discount = Number(row.discount) || 0;
     const grossAmt = Number((rate * row.qty).toFixed(2));
@@ -232,15 +264,25 @@ export const createSalesInvoice = async ({
       .join(", "),
   };
 
-  const priceLevelSnapshot = {
-    name: priceLevel.name,
-    taxPercent: priceLevel.taxPercent,
-  };
+  const priceLevelSnapshot = priceLevel
+    ? {
+        name: priceLevel.name,
+        taxPercent: priceLevel.taxPercent,
+      }
+    : undefined;
 
   return withTransaction(async (session) => {
+    const splitTotal = round2(
+      (Array.isArray(payments) ? payments : []).reduce(
+        (sum, row) => sum + round2(Math.max(0, Number(row.amount) || 0)),
+        0
+      )
+    );
+    const receivedForPayment = splitTotal > 0 ? splitTotal : receivedInput;
+
     const payment = resolveInvoicePayment(
       totals.grandTotal,
-      receivedInput,
+      receivedForPayment,
       effectiveSaleMode
     );
     const { paidAmount, balanceAmount, paymentStatus } = payment;
@@ -265,8 +307,7 @@ export const createSalesInvoice = async ({
         invoiceNo,
         invoiceDate: new Date(invoiceDate),
         salesType,
-        priceLevelId,
-        priceLevelSnapshot,
+        ...(priceLevel ? { priceLevelId: priceLevel._id, priceLevelSnapshot } : {}),
         customerId,
         customerSnapshot,
         supplierStateCode,
@@ -334,6 +375,15 @@ export const createSalesInvoice = async ({
       session
     );
 
+    return invoice;
+  }).then(async (invoice) => {
+    if (quotationId) {
+      await markQuotationConverted({
+        companyId,
+        quotationId,
+        salesInvoiceId: invoice._id,
+      });
+    }
     return invoice;
   });
 };

@@ -143,6 +143,7 @@ const SGST_RATE = 9;
 const CGST_RATE = 9;
 
 const buildManualSalesReturnLine = (dbItem, priceLevel, row, slNo) => {
+  const priceLevelPct = priceLevel?.taxPercent ?? 0;
   const qty = Number(row.qty);
   const rate = Number(row.rate);
   const discount = Number(row.discount) || 0;
@@ -159,8 +160,8 @@ const buildManualSalesReturnLine = (dbItem, priceLevel, row, slNo) => {
     itemId: dbItem._id,
     hsn: row.hsn || dbItem.hsn || "",
     uomId: dbItem.uomId?._id ?? dbItem.uomId,
-    baseRate: resolveItemBaseRate(dbItem, row, priceLevel.taxPercent),
-    priceLevelPct: priceLevel.taxPercent,
+    baseRate: resolveItemBaseRate(dbItem, row, priceLevelPct),
+    priceLevelPct,
     rate,
     qty,
     discount,
@@ -188,18 +189,21 @@ const createManualSalesReturn = async ({
   if (!customerId) throw new ApiError(400, "Customer is required for manual return");
   if (!warehouseId) throw new ApiError(400, "Warehouse is required for manual return");
   if (!salesType) throw new ApiError(400, "Sales type is required for manual return");
-  if (!priceLevelId) throw new ApiError(400, "Price level is required for manual return");
   if (!items?.length) throw new ApiError(400, "At least one return item is required");
 
-  const [customer, warehouse, priceLevel] = await Promise.all([
+  const [customer, warehouse] = await Promise.all([
     Customer.findOne({ _id: customerId, companyId, type: "sales", isActive: true }),
     Warehouse.findOne({ _id: warehouseId, companyId, isActive: true }),
-    PriceLevel.findOne({ _id: priceLevelId, companyId, isActive: true }),
   ]);
 
   if (!customer) throw new ApiError(404, "Customer not found");
   if (!warehouse) throw new ApiError(404, "Warehouse not found");
-  if (!priceLevel) throw new ApiError(404, "Price level not found");
+
+  let priceLevel = null;
+  if (priceLevelId) {
+    priceLevel = await PriceLevel.findOne({ _id: priceLevelId, companyId, isActive: true });
+    if (!priceLevel) throw new ApiError(404, "Price level not found");
+  }
 
   const itemIds = [...new Set(items.map((row) => String(row.itemId)).filter(Boolean))];
   const dbItems = await Item.find({ _id: { $in: itemIds }, companyId, isActive: true }).populate(
@@ -261,8 +265,15 @@ const createManualSalesReturn = async ({
           referenceInvoiceNo: referenceInvoiceNo?.trim() || "",
           originalInvoiceNo,
           salesType,
-          priceLevelId,
-          priceLevelSnapshot: { name: priceLevel.name, taxPercent: priceLevel.taxPercent },
+          ...(priceLevel
+            ? {
+                priceLevelId,
+                priceLevelSnapshot: {
+                  name: priceLevel.name,
+                  taxPercent: priceLevel.taxPercent,
+                },
+              }
+            : {}),
           customerId,
           customerSnapshot: customerSnapshotFromCustomer(customer),
           items: processedItems,

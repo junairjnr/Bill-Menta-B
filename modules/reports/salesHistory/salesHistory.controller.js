@@ -54,11 +54,11 @@ export const salesHistory = asyncHandler(async (req, res) => {
     .populate("customerId", "name phone")
     .populate("warehouseId", "name code")
     .populate("priceLevelId", "name taxPercent")
-    .populate("items.itemId", "name code")
+    .populate("items.itemId", "name code hsnCode")
     .select(
       "invoiceNo invoiceDate salesType customerId customerSnapshot warehouseId priceLevelSnapshot items grandTotal status"
     )
-    .sort({ invoiceDate: -1 })
+    .sort({ invoiceDate: -1, createdAt: -1, _id: -1 })
     .lean();
 
   const mapRow = (inv, itemRow) => {
@@ -80,7 +80,7 @@ export const salesHistory = asyncHandler(async (req, res) => {
       warehouse: inv.warehouseId,
       itemId: itemRow?.itemId?._id ?? itemRow?.itemId,
       itemName: typeof itemRow?.itemId === "object" ? itemRow.itemId.name : "",
-      hsn: itemRow?.hsn || "",
+      hsn: itemRow?.hsn || itemRow?.itemId?.hsnCode || "",
       baseRate: itemRow?.baseRate || 0,
       priceLevelPct: itemRow?.priceLevelPct || 0,
       rate: itemRow?.rate || 0,

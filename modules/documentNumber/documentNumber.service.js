@@ -1,6 +1,7 @@
 import SalesInvoice from "../sales/salesInvoice/salesInvoice.model.js";
 import PurchaseInvoice from "../purchase/purchaseInvoice/purchaseInvoice.model.js";
 import SalesReturn from "../sales/salesReturn/salesReturn.model.js";
+import Quotation from "../sales/quotation/quotation.model.js";
 import PurchaseReturn from "../purchase/purchaseReturn/purchaseReturn.model.js";
 import ReceiptPayment from "../receipt-payment/receiptPayment.model.js";
 import Expense from "../expense/expense.model.js";
@@ -19,6 +20,7 @@ export const DOCUMENT_TYPES = {
   PAYMENT: "payment",
   EXPENSE: "expense",
   JOURNAL: "journal",
+  QUOTATION: "quotation",
 };
 
 const voucherPrefix = (voucherType) => (voucherType === "receipt" ? "RCPT" : "PAY");
@@ -92,6 +94,43 @@ export const getNextPurchaseInvoiceNo = async (companyId, financialYearId) => {
   if (!last) return `${prefix}01`;
 
   const lastNo = parseInt(last.invoiceNo.split("/").pop(), 10) || 0;
+  return `${prefix}${String(lastNo + 1).padStart(2, "0")}`;
+};
+
+/** Quotation: BM/QT-RT/2026-27/01 or BM/QT-WH/2026-27/01 */
+export const getNextQuotationNo = async (companyId, financialYearId, salesType) => {
+  const [fy, company] = await Promise.all([
+    FinancialYear.findById(financialYearId),
+    Company.findById(companyId).select("code name"),
+  ]);
+  if (!fy) throw new ApiError(404, "Financial year not found");
+  if (!company) throw new ApiError(404, "Company not found");
+
+  const companyCode = company.code?.toUpperCase();
+  if (!companyCode) {
+    throw new ApiError(
+      400,
+      "Company code not set. Set company code in company settings before creating quotations."
+    );
+  }
+
+  const typeCode = salesType === "retail" ? "QT-RT" : "QT-WH";
+  const prefix = `${companyCode}/${typeCode}/${fy.label}/`;
+
+  const last = await Quotation.findOne(
+    {
+      companyId,
+      financialYearId,
+      salesType,
+      quotationNo: { $regex: `^${prefix.replace(/\//g, "\\/")}` },
+    },
+    { quotationNo: 1 },
+    { sort: { createdAt: -1 } }
+  );
+
+  if (!last) return `${prefix}01`;
+
+  const lastNo = parseInt(last.quotationNo.split("/").pop(), 10) || 0;
   return `${prefix}${String(lastNo + 1).padStart(2, "0")}`;
 };
 
@@ -272,6 +311,11 @@ export const getNextDocumentNumber = async (
     case DOCUMENT_TYPES.JOURNAL: {
       const nextNumber = await getNextJournalNo(companyId, financialYearId);
       return { documentType, nextNumber };
+    }
+    case DOCUMENT_TYPES.QUOTATION: {
+      if (!salesType) throw new ApiError(400, "salesType is required (retail or wholesale)");
+      const nextNumber = await getNextQuotationNo(companyId, financialYearId, salesType);
+      return { documentType, nextNumber, salesType };
     }
     default:
       throw new ApiError(

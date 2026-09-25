@@ -3,6 +3,7 @@ import SalesReturn from "../../sales/salesReturn/salesReturn.model.js";
 import PurchaseInvoice from "../../purchase/purchaseInvoice/purchaseInvoice.model.js";
 import PurchaseReturn from "../../purchase/purchaseReturn/purchaseReturn.model.js";
 import ReceiptPayment from "../../receipt-payment/receiptPayment.model.js";
+import Customer from "../../masters/customer/customer.model.js";
 
 const buildDateFilter = (dateFrom, dateTo) => {
   if (!dateFrom && !dateTo) return null;
@@ -33,6 +34,7 @@ const fetchCustomerEntries = async ({
   partyId,
   dateFilter,
   partyType,
+  salesType,
 }) => {
   if (!includeCustomerSide(partyType)) return [];
 
@@ -42,6 +44,28 @@ const fetchCustomerEntries = async ({
     isActive: { $ne: false },
   };
   if (partyId) base.customerId = partyId;
+  if (salesType === "retail" || salesType === "wholesale") base.salesType = salesType;
+
+  const receiptFilter = {
+    companyId,
+    financialYearId,
+    voucherType: "receipt",
+    status: { $ne: "cancelled" },
+    isActive: { $ne: false },
+  };
+  if (partyId) {
+    receiptFilter.partyId = partyId;
+  } else if (salesType === "retail" || salesType === "wholesale") {
+    const customerIds = await Customer.find({
+      companyId,
+      type: "sales",
+      customerType: salesType,
+      isActive: true,
+    })
+      .select("_id")
+      .lean();
+    receiptFilter.partyId = { $in: customerIds.map((c) => c._id) };
+  }
 
   const [invoices, returns, receipts] = await Promise.all([
     SalesInvoice.find(applyDate({ ...base, status: "confirmed" }, "invoiceDate", dateFilter))
@@ -50,20 +74,7 @@ const fetchCustomerEntries = async ({
     SalesReturn.find(applyDate({ ...base, status: "confirmed" }, "returnDate", dateFilter))
       .select("returnNo returnDate grandTotal salesType customerId customerSnapshot")
       .lean(),
-    ReceiptPayment.find(
-      applyDate(
-        {
-          companyId,
-          financialYearId,
-          voucherType: "receipt",
-          status: { $ne: "cancelled" },
-          isActive: { $ne: false },
-          ...(partyId ? { partyId } : {}),
-        },
-        "date",
-        dateFilter
-      )
-    )
+    ReceiptPayment.find(applyDate(receiptFilter, "date", dateFilter))
       .select("voucherNo date totalAmount paymentMode partyId partySnapshot")
       .lean(),
   ]);
@@ -194,6 +205,7 @@ export const getShopReport = async ({
   financialYearId,
   partyType,
   partyId,
+  salesType,
   dateFrom,
   dateTo,
   page = 1,
@@ -210,6 +222,7 @@ export const getShopReport = async ({
       partyId,
       dateFilter,
       partyType: normalizedPartyType,
+      salesType,
     }),
     fetchVendorEntries({
       companyId,

@@ -250,21 +250,24 @@ export const postPurchaseInvoice = async (
   const existing = await getJournalByReference(companyId, "PurchaseInvoice", invoice._id);
   if (existing) return existing;
 
-  const [inventory, gstInput, ap, cash] = await Promise.all([
+  const [inventory, gstInput, ap, cash, expenseAcc] = await Promise.all([
     getAccountByCode(companyId, COA.INVENTORY, session),
     getAccountByCode(companyId, COA.GST_INPUT, session),
     getAccountByCode(companyId, COA.ACCOUNTS_PAYABLE, session),
     getAccountByCode(companyId, COA.CASH, session),
+    getAccountByCode(companyId, COA.EXPENSE, session),
   ]);
 
   const netAmount = round2(invoice.netAmount);
   const totalTax = round2(invoice.totalTax);
+  const cashDiscountAmt = round2(invoice.cashDiscountAmt || 0);
   const grandTotal = round2(invoice.grandTotal);
+  const billTotal = round2(invoice.billTotal ?? grandTotal + cashDiscountAmt);
   const paidAmount = round2(invoice.paidAmount ?? 0);
   const balanceAmount = round2(
     invoice.balanceAmount ?? Math.max(0, grandTotal - paidAmount)
   );
-  const roundOff = round2(invoice.roundOff ?? grandTotal - netAmount - totalTax);
+  const roundOff = round2(invoice.roundOff ?? billTotal - netAmount - totalTax);
   const paymentLines = (invoice.payments || []).filter((p) => round2(p.amount) > 0);
   const hasSplitPayments = paymentLines.length > 0;
 
@@ -330,6 +333,15 @@ export const postPurchaseInvoice = async (
     `Round off ${invoice.invoiceNo}`,
     session
   );
+
+  if (cashDiscountAmt > 0) {
+    lines.push(
+      line(expenseAcc, {
+        credit: cashDiscountAmt,
+        narration: `Cash discount ${invoice.invoiceNo}`,
+      })
+    );
+  }
 
   return createJournalEntry(
     {

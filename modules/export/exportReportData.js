@@ -120,12 +120,12 @@ export const fetchOperationalReportRows = async (reportType, ctx) => {
       if (query.itemId) filter["items.itemId"] = query.itemId;
       if (query.customerId) filter.customerId = query.customerId;
       if (query.salesType) filter.salesType = query.salesType;
-      const invoices = await salesInvoiceModel.find(filter).populate("customerId", "name").select("invoiceNo invoiceDate salesType customerSnapshot items grandTotal status").limit(EXPORT_LIMIT).lean();
+      const invoices = await salesInvoiceModel.find(filter).sort({ invoiceDate: -1, createdAt: -1 }).populate("customerId", "name").populate("items.itemId", "name hsnCode").select("invoiceNo invoiceDate salesType customerSnapshot items grandTotal status").limit(EXPORT_LIMIT).lean();
       const rows = [];
       for (const inv of invoices) {
         for (const item of inv.items || []) {
           if (query.itemId && item.itemId?.toString() !== query.itemId) continue;
-          rows.push({ invoiceNo: inv.invoiceNo, date: inv.invoiceDate, salesType: inv.salesType, customer: inv.customerSnapshot?.name || "", itemName: item.name || item.itemSnapshot?.name || "", qty: item.qty, rate: item.rate, total: item.total ?? item.qty * item.rate, status: inv.status });
+          rows.push({ invoiceNo: inv.invoiceNo, date: inv.invoiceDate, salesType: inv.salesType, customer: inv.customerSnapshot?.name || "", itemName: item.name || item.itemSnapshot?.name || "", hsn: item.hsn || item.itemId?.hsnCode || "", qty: item.qty, rate: item.rate, taxableValue: item.taxableValue, sgst: item.sgst, cgst: item.cgst, total: item.total ?? item.qty * item.rate, status: inv.status });
         }
       }
       return rows;
@@ -134,12 +134,12 @@ export const fetchOperationalReportRows = async (reportType, ctx) => {
       const filter = { companyId, financialYearId, isActive: true, ...buildDateFilter(query, "purchaseDate") };
       if (query.itemId) filter["items.itemId"] = query.itemId;
       if (query.vendorId) filter.vendorId = query.vendorId;
-      const invoices = await purchaseInvoiceModel.find(filter).populate("vendorId", "name").select("invoiceNo purchaseDate vendorSnapshot items grandTotal status").limit(EXPORT_LIMIT).lean();
+      const invoices = await purchaseInvoiceModel.find(filter).sort({ purchaseDate: -1, createdAt: -1 }).populate("vendorId", "name").populate("items.itemId", "name hsnCode").select("invoiceNo purchaseDate vendorSnapshot items grandTotal status").limit(EXPORT_LIMIT).lean();
       const rows = [];
       for (const inv of invoices) {
         for (const item of inv.items || []) {
           if (query.itemId && item.itemId?.toString() !== query.itemId) continue;
-          rows.push({ invoiceNo: inv.invoiceNo, date: inv.purchaseDate, vendor: inv.vendorSnapshot?.name || "", itemName: item.name || item.itemSnapshot?.name || "", qty: item.qty, rate: item.rate, total: item.total ?? item.qty * item.rate, status: inv.status });
+          rows.push({ invoiceNo: inv.invoiceNo, date: inv.purchaseDate, vendor: inv.vendorSnapshot?.name || "", itemName: item.name || item.itemSnapshot?.name || "", hsn: item.hsn || item.itemId?.hsnCode || "", qty: item.qty, rate: item.rate, taxableValue: item.taxableValue, sgst: item.sgst, cgst: item.cgst, total: item.total ?? item.qty * item.rate, status: inv.status });
         }
       }
       return rows;

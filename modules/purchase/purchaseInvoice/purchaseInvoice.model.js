@@ -81,6 +81,9 @@ const purchaseInvoiceSchema = new mongoose.Schema(
     totalTax: { type: Number, default: 0 }, // sgst + cgst
     total: { type: Number, default: 0 }, // netAmount + totalTax
     roundOff: { type: Number, default: 0 }, // Math.round(total) - total
+    billTotal: { type: Number, default: 0 },
+    cashDiscountPercent: { type: Number, default: 0, min: 0, max: 100 },
+    cashDiscountAmt: { type: Number, default: 0 },
     grandTotal: { type: Number, default: 0 },
 
     returnedAmount: { type: Number, default: 0 },
