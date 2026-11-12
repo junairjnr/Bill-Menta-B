@@ -14,6 +14,19 @@ import {
   resolveInvoicePaymentFromInput,
 } from "../../../utils/invoicePayment.utils.js";
 
+const resolvePurchaseItemTaxPercent = (row, dbItem) => {
+  if (!dbItem?.taxMasterId) return 0;
+  const taxMaster =
+    typeof dbItem.taxMasterId === "object" && dbItem.taxMasterId
+      ? dbItem.taxMasterId
+      : null;
+  const fromRow = Number(row.taxPercent);
+  if (row.taxPercent != null && row.taxPercent !== "" && Number.isFinite(fromRow)) {
+    return fromRow > 0 ? fromRow : 0;
+  }
+  return Number(taxMaster?.taxPercent ?? dbItem.taxPercent) || 0;
+};
+
 // ── Create Purchase Invoice ───────────────────────────────────
 export const createPurchaseInvoice = async ({
   companyId,
@@ -43,7 +56,10 @@ export const createPurchaseInvoice = async ({
     const itemIds = items.map((i) => i.itemId);
     const dbItems = await Item.find({
       _id: { $in: itemIds }, companyId, isActive: true,
-    }).populate("uomId", "name shortCode").session(session);
+    })
+      .populate("uomId", "name shortCode")
+      .populate("taxMasterId", "name taxPercent")
+      .session(session);
     if (dbItems.length !== itemIds.length)
       throw new ApiError(400, "One or more items not found");
 
@@ -75,9 +91,15 @@ export const createPurchaseInvoice = async ({
       const grossAmt     = Number((row.qty * row.rate).toFixed(2));
       const discountAmt  = Number((grossAmt * discount / 100).toFixed(2));
       const taxableValue = Number((grossAmt - discountAmt).toFixed(2));
-      const taxPercent   = Number(row.taxPercent ?? dbItem.taxPercent ?? 18);
-      const sgst         = Number((taxableValue * taxPercent / 200).toFixed(2));
-      const cgst         = Number((taxableValue * taxPercent / 200).toFixed(2));
+      const taxPercent = resolvePurchaseItemTaxPercent(row, dbItem);
+      const sgst =
+        taxPercent > 0
+          ? Number((taxableValue * taxPercent / 200).toFixed(2))
+          : 0;
+      const cgst =
+        taxPercent > 0
+          ? Number((taxableValue * taxPercent / 200).toFixed(2))
+          : 0;
       const total        = Number((taxableValue + sgst + cgst).toFixed(2));
 
       netAmount  += taxableValue;
